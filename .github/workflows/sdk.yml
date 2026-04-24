@@ -1,0 +1,227 @@
+name: 'Build SDK'
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: 'Upload to R2'
+        type: boolean
+        default: false
+
+jobs:
+  build-linux:
+    name: 'Build SDK (Linux x86_64)'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v5
+
+      - name: 'Get SDK version'
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "sdk_version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sdk_version=0.0.0-dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 'Cache downloads'
+        uses: actions/cache@v5
+        with:
+          path: sdk/tmp
+          key: sdk-dl-linux-x86_64-${{ hashFiles('tools/downloads.cfg') }}
+          restore-keys: |
+            sdk-dl-linux-x86_64-
+
+      - name: 'Install build dependencies'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool pkg-config \
+            libxkbcommon-x11-0 libxcb-xinerama0 libxcb-cursor0 \
+            libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxcb-render-util0
+
+      - name: 'Build and package SDK'
+        env:
+          SDK_VERSION: ${{ steps.version.outputs.sdk_version }}
+        run: |
+          chmod +x tools/build.sh tools/package.sh
+          ./tools/build.sh
+          ./tools/package.sh
+
+      - name: 'Upload artifact'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sdk-linux-x86_64
+          path: |
+            sdk/openmv-sdk-*.tar.xz
+            sdk/openmv-sdk-*.tar.xz.sha256
+          retention-days: 7
+          if-no-files-found: error
+
+  build-darwin:
+    name: 'Build SDK (macOS arm64)'
+    runs-on: macos-latest
+
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v5
+
+      - name: 'Get SDK version'
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "sdk_version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sdk_version=0.0.0-dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 'Cache downloads'
+        uses: actions/cache@v5
+        with:
+          path: sdk/tmp
+          key: sdk-dl-darwin-arm64-${{ hashFiles('tools/downloads.cfg') }}
+          restore-keys: |
+            sdk-dl-darwin-arm64-
+
+      - name: 'Install build dependencies'
+        run: brew install automake autoconf libtool pkg-config xz
+
+      - name: 'Import Apple certificate'
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: 'Build SDK'
+        env:
+          SDK_VERSION: ${{ steps.version.outputs.sdk_version }}
+        run: |
+          chmod +x tools/build.sh tools/package.sh
+          ./tools/build.sh
+
+      - name: 'Sign Mach-O binaries'
+        shell: bash
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          SDK_STAGE="sdk/openmv-sdk-${{ steps.version.outputs.sdk_version }}-darwin-arm64"
+          echo "Scanning ${SDK_STAGE} for unsigned Mach-O binaries..."
+          MACHO_LIST=$(mktemp)
+          find "${SDK_STAGE}" -type f \( -perm +111 -o -name "*.dylib" -o -name "*.so" \) \
+            -exec file {} \; 2>/dev/null | grep "Mach-O" | grep -v "(for architecture" \
+            | cut -d: -f1 | sort -u > "${MACHO_LIST}" || true
+          ENTITLEMENTS="tools/entitlements.plist"
+          COUNT=0
+          while IFS= read -r f; do
+            sig=$(codesign -dvv "$f" 2>&1) || true
+            if ! echo "$sig" | grep -q "Authority=Developer ID"; then
+              echo "  Signing: $f"
+              codesign --force --options runtime --timestamp \
+                --entitlements "${ENTITLEMENTS}" \
+                --sign "${APPLE_SIGNING_IDENTITY}" "$f"
+              COUNT=$((COUNT + 1))
+            fi
+          done < "${MACHO_LIST}"
+          rm -f "${MACHO_LIST}"
+          echo "Signed ${COUNT} binaries."
+
+      - name: 'Package SDK'
+        env:
+          SDK_VERSION: ${{ steps.version.outputs.sdk_version }}
+        run: ./tools/package.sh
+
+      - name: 'Upload artifact'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sdk-darwin-arm64
+          path: |
+            sdk/openmv-sdk-*.tar.xz
+            sdk/openmv-sdk-*.tar.xz.sha256
+          retention-days: 7
+          if-no-files-found: error
+
+  build-windows:
+    name: 'Build SDK (Windows x86_64)'
+    runs-on: windows-latest
+
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v5
+
+      - name: 'Get SDK version'
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "sdk_version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sdk_version=0.0.0-dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 'Cache downloads'
+        uses: actions/cache@v5
+        with:
+          path: sdk/tmp
+          key: sdk-dl-windows-x86_64-${{ hashFiles('tools/downloads.cfg') }}
+          restore-keys: |
+            sdk-dl-windows-x86_64-
+
+      - name: 'Setup MSYS2'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-libusb
+            autoconf automake libtool pkg-config make git
+            unzip xz
+
+      - name: 'Build and package SDK'
+        shell: msys2 {0}
+        env:
+          SDK_VERSION: ${{ steps.version.outputs.sdk_version }}
+        run: |
+          chmod +x tools/build.sh tools/package.sh
+          ./tools/build.sh
+          ./tools/package.sh
+
+      - name: 'Upload artifact'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sdk-windows-x86_64
+          path: |
+            sdk/openmv-sdk-*.tar.xz
+            sdk/openmv-sdk-*.tar.xz.sha256
+          retention-days: 7
+          if-no-files-found: error
+
+  upload:
+    name: 'Upload to R2'
+    needs: [build-linux, build-darwin, build-windows]
+    runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.upload)
+
+    steps:
+      - name: 'Download artifacts'
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts/
+          pattern: 'sdk-*'
+          merge-multiple: true
+
+      - name: 'Upload to R2'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL: ${{ secrets.AWS_ENDPOINT_URL }}
+        run: |
+          for f in artifacts/openmv-sdk-*.tar.xz artifacts/openmv-sdk-*.tar.xz.sha256; do
+            echo "Uploading $(basename "$f")..."
+            aws s3 cp "$f" "s3://download/sdk/$(basename "$f")"
+          done
+          echo "Done."
