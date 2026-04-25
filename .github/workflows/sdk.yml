@@ -110,16 +110,20 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           SDK_STAGE="sdk/openmv-sdk-${{ steps.version.outputs.sdk_version }}-darwin-arm64"
-          echo "Scanning ${SDK_STAGE} for unsigned Mach-O binaries..."
+          echo "Scanning ${SDK_STAGE} for Mach-O binaries..."
           MACHO_LIST=$(mktemp)
           find "${SDK_STAGE}" -type f \
             -exec file {} \; 2>/dev/null | grep "Mach-O" | grep -v "(for architecture" \
             | cut -d: -f1 | sort -u > "${MACHO_LIST}" || true
           ENTITLEMENTS="tools/entitlements.plist"
           COUNT=0
+          SKIP=0
           while IFS= read -r f; do
             if codesign --verify --strict "$f" 2>/dev/null; then
-              continue
+              if codesign -d -v "$f" 2>&1 | grep -q "Authority="; then
+                SKIP=$((SKIP + 1))
+                continue
+              fi
             fi
             echo "  Signing: $f"
             codesign --force --options runtime --timestamp \
@@ -128,7 +132,7 @@ jobs:
             COUNT=$((COUNT + 1))
           done < "${MACHO_LIST}"
           rm -f "${MACHO_LIST}"
-          echo "Signed ${COUNT} binaries."
+          echo "Signed ${COUNT} binaries, skipped ${SKIP} already valid."
 
       - name: 'Package SDK'
         env:
