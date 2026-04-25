@@ -316,7 +316,7 @@ if [[ "${SDK_PLATFORM}" == windows-* ]]; then
 else
     printf 'home = %s\nrelocatable = true\n' "${PYTHON_HOME}" > "${SDK_STAGE}/python/pyvenv.cfg"
 fi
-VIRTUAL_ENV="${VENV}" "${UV}" pip install --python "${PYTHON}" \
+VIRTUAL_ENV="${VENV}" "${UV}" pip install --python "${PYTHON}" --prefix "${VENV}" \
     flake8==6.0.0 \
     pytest==7.4.0 \
     ethos-u-vela==4.2.0 \
