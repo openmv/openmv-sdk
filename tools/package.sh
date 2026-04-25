@@ -51,8 +51,13 @@ case "$(uname -s)-$(uname -m)" in
 esac
 
 UTIL="${STEDGEAI}/Utilities/${KEEP_UTIL}"
-PYLIB="${UTIL}/lib"
-SITE="${PYLIB}/python3.9/site-packages"
+if [[ "${KEEP_UTIL}" == "windows" ]]; then
+    PYLIB="${UTIL}/Lib"
+    SITE="${PYLIB}/site-packages"
+else
+    PYLIB="${UTIL}/lib"
+    SITE="${PYLIB}/python3.9/site-packages"
+fi
 
 echo "Stripping STEdgeAI (keeping Utilities/${KEEP_UTIL})..."
 
