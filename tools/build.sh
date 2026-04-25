@@ -326,6 +326,7 @@ VIRTUAL_ENV="${VENV}" "${UV}" pip install --python "${PYTHON}" \
     colorama==0.4.6 \
     mpremote==1.27.0 \
     spsdk==3.8.0 \
+    gdbrunner==0.0.5 \
     "pyserial @ git+https://github.com/pyserial/pyserial.git@911a0b8c110f3d3513bab67e64d95d1310517454"
 rm "${SDK_STAGE}/python/pyvenv.cfg"
 

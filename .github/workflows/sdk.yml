@@ -112,20 +112,20 @@ jobs:
           SDK_STAGE="sdk/openmv-sdk-${{ steps.version.outputs.sdk_version }}-darwin-arm64"
           echo "Scanning ${SDK_STAGE} for unsigned Mach-O binaries..."
           MACHO_LIST=$(mktemp)
-          find "${SDK_STAGE}" -type f \( -perm +111 -o -name "*.dylib" -o -name "*.so" \) \
+          find "${SDK_STAGE}" -type f \
             -exec file {} \; 2>/dev/null | grep "Mach-O" | grep -v "(for architecture" \
             | cut -d: -f1 | sort -u > "${MACHO_LIST}" || true
           ENTITLEMENTS="tools/entitlements.plist"
           COUNT=0
           while IFS= read -r f; do
-            sig=$(codesign -dvv "$f" 2>&1) || true
-            if ! echo "$sig" | grep -q "Authority=Developer ID"; then
-              echo "  Signing: $f"
-              codesign --force --options runtime --timestamp \
-                --entitlements "${ENTITLEMENTS}" \
-                --sign "${APPLE_SIGNING_IDENTITY}" "$f"
-              COUNT=$((COUNT + 1))
+            if codesign --verify --strict "$f" 2>/dev/null; then
+              continue
             fi
+            echo "  Signing: $f"
+            codesign --force --options runtime --timestamp \
+              --entitlements "${ENTITLEMENTS}" \
+              --sign "${APPLE_SIGNING_IDENTITY}" "$f"
+            COUNT=$((COUNT + 1))
           done < "${MACHO_LIST}"
           rm -f "${MACHO_LIST}"
           echo "Signed ${COUNT} binaries."
@@ -178,8 +178,9 @@ jobs:
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-libusb
+            mingw-w64-x86_64-xz
             autoconf automake libtool pkg-config make git
-            unzip xz
+            unzip
 
       - name: 'Build and package SDK'
         shell: msys2 {0}

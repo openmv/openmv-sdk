@@ -72,6 +72,9 @@ for d in "${STEDGEAI}/scripts"/*/lib/*/; do
     fi
 done
 
+# Remove mlc_tool (Qt GUI, not needed)
+rm -rf "${STEDGEAI}/Utilities/${KEEP_UTIL}/mlc_tool"
+
 # Remove docs, projects, unused middlewares
 rm -rf "${STEDGEAI}/Documentation"
 rm -rf "${STEDGEAI}/Projects"
