@@ -115,11 +115,16 @@ find "${SITE}" -maxdepth 2 -name "test" -type d -exec rm -rf {} + 2>/dev/null ||
 # Remove .DS_Store files
 find "${SDK_STAGE}" -name ".DS_Store" -delete 2>/dev/null || true
 
-# Recompile .pyc files so embedded timestamps match the .py sources
-echo "Recompiling .pyc files..."
-STEDGE_PYTHON="${UTIL}/python"
-[[ -f "${UTIL}/python.exe" ]] && STEDGE_PYTHON="${UTIL}/python.exe"
-"${STEDGE_PYTHON}" -m compileall -q -f "${PYLIB}" 2>/dev/null || true
+# Remove __pycache__ on Windows to avoid MAX_PATH issues with NSIS
+if [[ "${KEEP_UTIL}" == "windows" ]]; then
+    echo "Removing __pycache__ directories..."
+    find "${SITE}" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+else
+    # Recompile .pyc files so embedded timestamps match the .py sources
+    echo "Recompiling .pyc files..."
+    STEDGE_PYTHON="${UTIL}/python"
+    "${STEDGE_PYTHON}" -m compileall -q -f "${PYLIB}" 2>/dev/null || true
+fi
 
 echo "Done."
 
