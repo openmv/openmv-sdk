@@ -5,10 +5,11 @@
 #
 # This work is licensed under the MIT license, see the file LICENSE for details.
 #
-# Strips the STEdgeAI component and packages the SDK into a tar.xz archive.
+# Strips the STEdgeAI component and packages the staged bundle into a tar.xz archive.
 # The SDK version is read from the SDK_VERSION environment variable.
+# The build target is selected by BUILD_TARGET (sdk|tools, default sdk).
 #
-# Usage: SDK_VERSION=1.4.0 ./tools/package.sh
+# Usage: SDK_VERSION=1.4.0 [BUILD_TARGET=sdk|tools] ./tools/package.sh
 
 set -euo pipefail
 
@@ -18,13 +19,18 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ########################################################################################
 # Configuration
 : "${SDK_VERSION:?SDK_VERSION environment variable is required}"
+BUILD_TARGET="${BUILD_TARGET:-sdk}"
+case "${BUILD_TARGET}" in
+    sdk|tools) ;;
+    *) echo "Error: BUILD_TARGET must be 'sdk' or 'tools' (got '${BUILD_TARGET}')"; exit 1 ;;
+esac
 case "$(uname -s)" in
     MSYS*|MINGW*) SDK_PLATFORM="windows-x86_64" ;;
     *)            SDK_PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)" ;;
 esac
-SDK_NAME="openmv-sdk-${SDK_VERSION}-${SDK_PLATFORM}"
+BUNDLE_NAME="openmv-${BUILD_TARGET}-${SDK_VERSION}-${SDK_PLATFORM}"
 BUILD_DIR="${REPO_DIR}/sdk"
-SDK_STAGE="${BUILD_DIR}/${SDK_NAME}"
+SDK_STAGE="${BUILD_DIR}/${BUNDLE_NAME}"
 NPROC=$(nproc 2>/dev/null || sysctl -n hw.ncpu)
 
 if [ ! -d "${SDK_STAGE}" ]; then
@@ -130,16 +136,16 @@ echo "Done."
 
 ########################################################################################
 # Package
-echo "Packaging ${SDK_NAME}..."
+echo "Packaging ${BUNDLE_NAME}..."
 cd "${BUILD_DIR}"
 echo "  Creating archive..."
-tar -cf - "${SDK_NAME}" | xz -3 -T${NPROC} > "${SDK_NAME}.tar.xz"
+tar -cf - "${BUNDLE_NAME}" | xz -3 -T${NPROC} > "${BUNDLE_NAME}.tar.xz"
 echo "  Computing checksum..."
 if command -v sha256sum &>/dev/null; then
-    sha256sum "${SDK_NAME}.tar.xz" > "${SDK_NAME}.tar.xz.sha256"
+    sha256sum "${BUNDLE_NAME}.tar.xz" > "${BUNDLE_NAME}.tar.xz.sha256"
 else
-    shasum -a 256 "${SDK_NAME}.tar.xz" > "${SDK_NAME}.tar.xz.sha256"
+    shasum -a 256 "${BUNDLE_NAME}.tar.xz" > "${BUNDLE_NAME}.tar.xz.sha256"
 fi
 echo "Done:"
-echo "  ${BUILD_DIR}/${SDK_NAME}.tar.xz"
-echo "  ${BUILD_DIR}/${SDK_NAME}.tar.xz.sha256"
+echo "  ${BUILD_DIR}/${BUNDLE_NAME}.tar.xz"
+echo "  ${BUILD_DIR}/${BUNDLE_NAME}.tar.xz.sha256"

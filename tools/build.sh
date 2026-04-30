@@ -5,10 +5,11 @@
 #
 # This work is licensed under the MIT license, see the file LICENSE for details.
 #
-# Builds a platform-specific OpenMV SDK.
+# Builds a platform-specific OpenMV SDK or IDE-tools bundle.
 # The SDK version is read from the SDK_VERSION environment variable.
+# The build target is selected by BUILD_TARGET (sdk|tools, default sdk).
 #
-# Usage: SDK_VERSION=1.4.0 ./tools/build.sh
+# Usage: SDK_VERSION=1.4.0 [BUILD_TARGET=sdk|tools] ./tools/build.sh
 
 set -euo pipefail
 
@@ -18,13 +19,18 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ########################################################################################
 # Configuration
 : "${SDK_VERSION:?SDK_VERSION environment variable is required}"
+BUILD_TARGET="${BUILD_TARGET:-sdk}"
+case "${BUILD_TARGET}" in
+    sdk|tools) ;;
+    *) echo "Error: BUILD_TARGET must be 'sdk' or 'tools' (got '${BUILD_TARGET}')"; exit 1 ;;
+esac
 case "$(uname -s)" in
     MSYS*|MINGW*) SDK_PLATFORM="windows-x86_64" ;;
     *)            SDK_PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)" ;;
 esac
-SDK_NAME="openmv-sdk-${SDK_VERSION}-${SDK_PLATFORM}"
+BUNDLE_NAME="openmv-${BUILD_TARGET}-${SDK_VERSION}-${SDK_PLATFORM}"
 BUILD_DIR="${REPO_DIR}/sdk"
-SDK_STAGE="${BUILD_DIR}/${SDK_NAME}"
+SDK_STAGE="${BUILD_DIR}/${BUNDLE_NAME}"
 TMPDIR_SDK="${BUILD_DIR}/tmp"
 NPROC=$(nproc 2>/dev/null || sysctl -n hw.ncpu)
 
@@ -131,64 +137,70 @@ run_installer() {
 
 ########################################################################################
 # Build
-echo "Building ${SDK_NAME}..."
+echo "Building ${BUNDLE_NAME}..."
 rm -rf "${SDK_STAGE}"
 mkdir -p "${SDK_STAGE}" "${BUILD_DIR}" "${TMPDIR_SDK}"
 
 # Download and verify all components
 echo ""
-COMPONENTS="GCC LLVM CMAKE STEDGEAI PYTHON MAKE UNCRUSTIFY"
-if [[ "${SDK_PLATFORM}" != windows-* ]]; then
-    COMPONENTS="${COMPONENTS} CUBEPROG PV"
+if [[ "${BUILD_TARGET}" == "sdk" ]]; then
+    COMPONENTS="GCC LLVM CMAKE STEDGEAI PYTHON MAKE UNCRUSTIFY"
+    if [[ "${SDK_PLATFORM}" != windows-* ]]; then
+        COMPONENTS="${COMPONENTS} CUBEPROG PV"
+    fi
+else
+    COMPONENTS="STEDGEAI PYTHON"
 fi
 for component in ${COMPONENTS}; do
     download_component "${component}"
 done
 
-# Extract: GCC
-echo "Extracting GCC..."
-mkdir -p "${SDK_STAGE}/gcc"
-if [[ "${SDK_PLATFORM}" == windows-* ]]; then
-    extract_zip "${TMPDIR_SDK}/$(resolve_var GCC DEST)" "${SDK_STAGE}/gcc"
-else
-    tar --strip-components=1 -Jxf "${TMPDIR_SDK}/$(resolve_var GCC DEST)" -C "${SDK_STAGE}/gcc"
-fi
-
-# Extract: LLVM
-echo "Extracting LLVM..."
-mkdir -p "${SDK_STAGE}/llvm"
-if [[ "${SDK_PLATFORM}" == windows-* ]]; then
-    extract_zip "${TMPDIR_SDK}/$(resolve_var LLVM DEST)" "${SDK_STAGE}/llvm"
-elif [[ "${SDK_PLATFORM}" == darwin-* ]]; then
-    extract_dmg "${TMPDIR_SDK}/$(resolve_var LLVM DEST)" "${SDK_STAGE}/llvm" "${TMPDIR_SDK}/llvm_mount"
-else
-    tar --strip-components=1 -Jxf "${TMPDIR_SDK}/$(resolve_var LLVM DEST)" -C "${SDK_STAGE}/llvm"
-fi
-
-# Build: GNU Make from source
-echo "Building GNU Make..."
-MAKE_SRC="${TMPDIR_SDK}/make_src"
-if [ ! -f "${MAKE_SRC}/make" ]; then
-    mkdir -p "${MAKE_SRC}"
-    tar --strip-components=1 -zxf "${TMPDIR_SDK}/$(resolve_var MAKE DEST)" -C "${MAKE_SRC}"
-    MAKE_CFLAGS="-w"
+if [[ "${BUILD_TARGET}" == "sdk" ]]; then
+    # Extract: GCC
+    echo "Extracting GCC..."
+    mkdir -p "${SDK_STAGE}/gcc"
     if [[ "${SDK_PLATFORM}" == windows-* ]]; then
-        MAKE_CFLAGS="-w -std=gnu89"
+        extract_zip "${TMPDIR_SDK}/$(resolve_var GCC DEST)" "${SDK_STAGE}/gcc"
+    else
+        tar --strip-components=1 -Jxf "${TMPDIR_SDK}/$(resolve_var GCC DEST)" -C "${SDK_STAGE}/gcc"
     fi
-    (cd "${MAKE_SRC}" && ./configure --quiet --without-guile CFLAGS="${MAKE_CFLAGS}" && make -j${NPROC} --quiet)
-fi
-mkdir -p "${SDK_STAGE}/make"
-cp "${MAKE_SRC}/make" "${SDK_STAGE}/make/make"
 
-# Extract: CMake
-echo "Extracting CMake..."
-mkdir -p "${SDK_STAGE}/cmake"
-if [[ "${SDK_PLATFORM}" == windows-* ]]; then
-    extract_zip "${TMPDIR_SDK}/$(resolve_var CMAKE DEST)" "${SDK_STAGE}/cmake"
-elif [[ "${SDK_PLATFORM}" == darwin-* ]]; then
-    tar --strip-components=3 -zxf "${TMPDIR_SDK}/$(resolve_var CMAKE DEST)" -C "${SDK_STAGE}/cmake"
-else
-    tar --strip-components=1 -zxf "${TMPDIR_SDK}/$(resolve_var CMAKE DEST)" -C "${SDK_STAGE}/cmake"
+    # Extract: LLVM
+    echo "Extracting LLVM..."
+    mkdir -p "${SDK_STAGE}/llvm"
+    if [[ "${SDK_PLATFORM}" == windows-* ]]; then
+        extract_zip "${TMPDIR_SDK}/$(resolve_var LLVM DEST)" "${SDK_STAGE}/llvm"
+    elif [[ "${SDK_PLATFORM}" == darwin-* ]]; then
+        extract_dmg "${TMPDIR_SDK}/$(resolve_var LLVM DEST)" "${SDK_STAGE}/llvm" "${TMPDIR_SDK}/llvm_mount"
+    else
+        tar --strip-components=1 -Jxf "${TMPDIR_SDK}/$(resolve_var LLVM DEST)" -C "${SDK_STAGE}/llvm"
+    fi
+
+    # Build: GNU Make from source
+    echo "Building GNU Make..."
+    MAKE_SRC="${TMPDIR_SDK}/make_src"
+    if [ ! -f "${MAKE_SRC}/make" ]; then
+        mkdir -p "${MAKE_SRC}"
+        tar --strip-components=1 -zxf "${TMPDIR_SDK}/$(resolve_var MAKE DEST)" -C "${MAKE_SRC}"
+        MAKE_CFLAGS="-w"
+        if [[ "${SDK_PLATFORM}" == windows-* ]]; then
+            MAKE_CFLAGS="-w -std=gnu89"
+        fi
+        (cd "${MAKE_SRC}" && ./configure --quiet --without-guile CFLAGS="${MAKE_CFLAGS}" && make -j${NPROC} --quiet)
+    fi
+    mkdir -p "${SDK_STAGE}/make"
+    cp "${MAKE_SRC}/make" "${SDK_STAGE}/make/make"
+
+    # Extract: CMake
+    echo "Extracting CMake..."
+    mkdir -p "${SDK_STAGE}/cmake"
+    if [[ "${SDK_PLATFORM}" == windows-* ]]; then
+        extract_zip "${TMPDIR_SDK}/$(resolve_var CMAKE DEST)" "${SDK_STAGE}/cmake"
+    elif [[ "${SDK_PLATFORM}" == darwin-* ]]; then
+        tar --strip-components=3 -zxf "${TMPDIR_SDK}/$(resolve_var CMAKE DEST)" -C "${SDK_STAGE}/cmake"
+    else
+        tar --strip-components=1 -zxf "${TMPDIR_SDK}/$(resolve_var CMAKE DEST)" -C "${SDK_STAGE}/cmake"
+    fi
 fi
 
 # Install: STEdgeAI (stripping is done in package.sh)
@@ -253,44 +265,46 @@ mkdir -p "${SDK_STAGE}/bin"
 cp "${DFU_BUILD}/dfu-util-src/src/dfu-util" "${SDK_STAGE}/bin/dfu-util"
 chmod +x "${SDK_STAGE}/bin/dfu-util"
 
-# Build: pv from source (Unix only, uses POSIX terminal I/O)
-if [[ "${SDK_PLATFORM}" != windows-* ]]; then
-    echo "Building pv..."
-    PV_BUILD="${TMPDIR_SDK}/pv_build"
-    if [ ! -f "${PV_BUILD}/pv" ]; then
-        mkdir -p "${PV_BUILD}"
-        tar --strip-components=1 -zxf "${TMPDIR_SDK}/$(resolve_var PV DEST)" -C "${PV_BUILD}"
-        (cd "${PV_BUILD}" && ./configure --quiet && make -j${NPROC} --quiet)
+if [[ "${BUILD_TARGET}" == "sdk" ]]; then
+    # Build: pv from source (Unix only, uses POSIX terminal I/O)
+    if [[ "${SDK_PLATFORM}" != windows-* ]]; then
+        echo "Building pv..."
+        PV_BUILD="${TMPDIR_SDK}/pv_build"
+        if [ ! -f "${PV_BUILD}/pv" ]; then
+            mkdir -p "${PV_BUILD}"
+            tar --strip-components=1 -zxf "${TMPDIR_SDK}/$(resolve_var PV DEST)" -C "${PV_BUILD}"
+            (cd "${PV_BUILD}" && ./configure --quiet && make -j${NPROC} --quiet)
+        fi
+        cp "${PV_BUILD}/pv" "${SDK_STAGE}/bin/pv"
+        chmod +x "${SDK_STAGE}/bin/pv"
     fi
-    cp "${PV_BUILD}/pv" "${SDK_STAGE}/bin/pv"
-    chmod +x "${SDK_STAGE}/bin/pv"
-fi
 
-# Build: Uncrustify from source
-echo "Building Uncrustify..."
-UNCRUSTIFY_BUILD="${TMPDIR_SDK}/uncrustify_build"
-if [ ! -f "${UNCRUSTIFY_BUILD}/build/uncrustify" ]; then
-    mkdir -p "${UNCRUSTIFY_BUILD}"
-    tar --strip-components=1 -zxf "${TMPDIR_SDK}/$(resolve_var UNCRUSTIFY DEST)" -C "${UNCRUSTIFY_BUILD}"
-    mkdir -p "${UNCRUSTIFY_BUILD}/build"
-    (
-        cd "${UNCRUSTIFY_BUILD}/build"
-        "${SDK_STAGE}/cmake/bin/cmake" .. -DCMAKE_BUILD_TYPE=Release
-        "${SDK_STAGE}/cmake/bin/cmake" --build . --parallel ${NPROC} --config Release
-    )
-fi
-if [[ "${SDK_PLATFORM}" == windows-* ]]; then
-    cp "${UNCRUSTIFY_BUILD}/build/Release/uncrustify.exe" "${SDK_STAGE}/bin/uncrustify.exe"
-else
-    cp "${UNCRUSTIFY_BUILD}/build/uncrustify" "${SDK_STAGE}/bin/uncrustify"
-fi
-chmod +x "${SDK_STAGE}/bin/uncrustify"
+    # Build: Uncrustify from source
+    echo "Building Uncrustify..."
+    UNCRUSTIFY_BUILD="${TMPDIR_SDK}/uncrustify_build"
+    if [ ! -f "${UNCRUSTIFY_BUILD}/build/uncrustify" ]; then
+        mkdir -p "${UNCRUSTIFY_BUILD}"
+        tar --strip-components=1 -zxf "${TMPDIR_SDK}/$(resolve_var UNCRUSTIFY DEST)" -C "${UNCRUSTIFY_BUILD}"
+        mkdir -p "${UNCRUSTIFY_BUILD}/build"
+        (
+            cd "${UNCRUSTIFY_BUILD}/build"
+            "${SDK_STAGE}/cmake/bin/cmake" .. -DCMAKE_BUILD_TYPE=Release
+            "${SDK_STAGE}/cmake/bin/cmake" --build . --parallel ${NPROC} --config Release
+        )
+    fi
+    if [[ "${SDK_PLATFORM}" == windows-* ]]; then
+        cp "${UNCRUSTIFY_BUILD}/build/Release/uncrustify.exe" "${SDK_STAGE}/bin/uncrustify.exe"
+    else
+        cp "${UNCRUSTIFY_BUILD}/build/uncrustify" "${SDK_STAGE}/bin/uncrustify"
+    fi
+    chmod +x "${SDK_STAGE}/bin/uncrustify"
 
-# Extract: ST CubeProgrammer (not available on Windows)
-if [[ "${SDK_PLATFORM}" != windows-* ]]; then
-    echo "Extracting ST CubeProgrammer..."
-    mkdir -p "${SDK_STAGE}/stcubeprog"
-    tar --strip-components=1 -zxf "${TMPDIR_SDK}/$(resolve_var CUBEPROG DEST)" -C "${SDK_STAGE}/stcubeprog"
+    # Extract: ST CubeProgrammer (not available on Windows)
+    if [[ "${SDK_PLATFORM}" != windows-* ]]; then
+        echo "Extracting ST CubeProgrammer..."
+        mkdir -p "${SDK_STAGE}/stcubeprog"
+        tar --strip-components=1 -zxf "${TMPDIR_SDK}/$(resolve_var CUBEPROG DEST)" -C "${SDK_STAGE}/stcubeprog"
+    fi
 fi
 
 # Extract: Python + install packages
@@ -316,29 +330,36 @@ if [[ "${SDK_PLATFORM}" == windows-* ]]; then
 else
     printf 'home = %s\nrelocatable = true\n' "${PYTHON_HOME}" > "${SDK_STAGE}/python/pyvenv.cfg"
 fi
-# ethos-u-vela pins flatbuffers==24.3.25 and onnx2tf pins flatbuffers==25.12.19;
-# both work fine on 25.x in practice, so override the resolver to break the tie.
-echo "flatbuffers==25.12.19" > "${TMPDIR_SDK}/overrides.txt"
-VIRTUAL_ENV="${VENV}" "${UV}" pip install --python "${PYTHON}" --prefix "${VENV}" \
-    --override "${TMPDIR_SDK}/overrides.txt" \
-    --torch-backend=cpu \
-    flake8==6.0.0 \
-    pytest==9.0.2 \
-    ethos-u-vela==4.2.0 \
-    tabulate==0.9.0 \
-    cryptography==46.0.7 \
-    pyelftools==0.27 \
-    colorama==0.4.6 \
-    mpremote==1.27.0 \
-    spsdk==3.8.0 \
-    gdbrunner==0.0.5 \
-    tensorflow==2.18.1 \
-    tf_keras==2.18.0 \
-    torch==2.11.0 \
-    torchvision==0.26.0 \
-    ultralytics==8.4.45 \
-    onnx2tf==2.4.0 \
-    "pyserial @ git+https://github.com/pyserial/pyserial.git@911a0b8c110f3d3513bab67e64d95d1310517454"
+if [[ "${BUILD_TARGET}" == "sdk" ]]; then
+    VIRTUAL_ENV="${VENV}" "${UV}" pip install --python "${PYTHON}" --prefix "${VENV}" \
+        flake8==6.0.0 \
+        pytest==9.0.2 \
+        ethos-u-vela==5.0.0 \
+        tabulate==0.9.0 \
+        cryptography==46.0.7 \
+        pyelftools==0.27 \
+        colorama==0.4.6 \
+        mpremote==1.27.0 \
+        spsdk==3.8.0 \
+        gdbrunner==0.0.5 \
+        "pyserial @ git+https://github.com/pyserial/pyserial.git@911a0b8c110f3d3513bab67e64d95d1310517454"
+else
+    # ethos-u-vela pins flatbuffers==24.3.25 and onnx2tf pins flatbuffers==25.12.19;
+    # both work fine on 25.x in practice, so override the resolver to break the tie.
+    echo "flatbuffers==25.12.19" > "${TMPDIR_SDK}/overrides.txt"
+    VIRTUAL_ENV="${VENV}" "${UV}" pip install --python "${PYTHON}" --prefix "${VENV}" \
+        --override "${TMPDIR_SDK}/overrides.txt" \
+        --torch-backend=cpu \
+        ethos-u-vela==5.0.0 \
+        pyelftools==0.27 \
+        spsdk==3.8.0 \
+        tensorflow==2.18.1 \
+        tf_keras==2.18.0 \
+        torch==2.11.0 \
+        torchvision==0.26.0 \
+        ultralytics==8.4.45 \
+        onnx2tf==2.4.0
+fi
 rm "${SDK_STAGE}/python/pyvenv.cfg"
 
 # Write version file

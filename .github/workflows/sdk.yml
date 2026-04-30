@@ -1,4 +1,4 @@
-name: 'Build SDK'
+name: 'Build SDK and TOOLS'
 
 on:
   push:
@@ -14,8 +14,12 @@ on:
 
 jobs:
   build-linux:
-    name: 'Build SDK (Linux x86_64)'
+    name: 'Build ${{ matrix.target }} (Linux x86_64)'
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [sdk, tools]
 
     steps:
       - name: 'Checkout'
@@ -45,9 +49,10 @@ jobs:
             libxkbcommon-x11-0 libxcb-xinerama0 libxcb-cursor0 \
             libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxcb-render-util0
 
-      - name: 'Build and package SDK'
+      - name: 'Build and package'
         env:
           SDK_VERSION: ${{ steps.version.outputs.sdk_version }}
+          BUILD_TARGET: ${{ matrix.target }}
         run: |
           chmod +x tools/build.sh tools/package.sh
           ./tools/build.sh
@@ -56,16 +61,20 @@ jobs:
       - name: 'Upload artifact'
         uses: actions/upload-artifact@v7
         with:
-          name: sdk-linux-x86_64
+          name: ${{ matrix.target }}-linux-x86_64
           path: |
-            sdk/openmv-sdk-*.tar.xz
-            sdk/openmv-sdk-*.tar.xz.sha256
+            sdk/openmv-${{ matrix.target }}-*.tar.xz
+            sdk/openmv-${{ matrix.target }}-*.tar.xz.sha256
           retention-days: 7
           if-no-files-found: error
 
   build-darwin:
-    name: 'Build SDK (macOS arm64)'
+    name: 'Build ${{ matrix.target }} (macOS arm64)'
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [sdk, tools]
 
     steps:
       - name: 'Checkout'
@@ -97,9 +106,10 @@ jobs:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
-      - name: 'Build SDK'
+      - name: 'Build'
         env:
           SDK_VERSION: ${{ steps.version.outputs.sdk_version }}
+          BUILD_TARGET: ${{ matrix.target }}
         run: |
           chmod +x tools/build.sh tools/package.sh
           ./tools/build.sh
@@ -109,7 +119,7 @@ jobs:
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
-          SDK_STAGE="sdk/openmv-sdk-${{ steps.version.outputs.sdk_version }}-darwin-arm64"
+          SDK_STAGE="sdk/openmv-${{ matrix.target }}-${{ steps.version.outputs.sdk_version }}-darwin-arm64"
           echo "Scanning ${SDK_STAGE} for Mach-O binaries..."
           MACHO_LIST=$(mktemp)
           find "${SDK_STAGE}" -type f \
@@ -134,24 +144,29 @@ jobs:
           rm -f "${MACHO_LIST}"
           echo "Signed ${COUNT} binaries, skipped ${SKIP} already valid."
 
-      - name: 'Package SDK'
+      - name: 'Package'
         env:
           SDK_VERSION: ${{ steps.version.outputs.sdk_version }}
+          BUILD_TARGET: ${{ matrix.target }}
         run: ./tools/package.sh
 
       - name: 'Upload artifact'
         uses: actions/upload-artifact@v7
         with:
-          name: sdk-darwin-arm64
+          name: ${{ matrix.target }}-darwin-arm64
           path: |
-            sdk/openmv-sdk-*.tar.xz
-            sdk/openmv-sdk-*.tar.xz.sha256
+            sdk/openmv-${{ matrix.target }}-*.tar.xz
+            sdk/openmv-${{ matrix.target }}-*.tar.xz.sha256
           retention-days: 7
           if-no-files-found: error
 
   build-windows:
-    name: 'Build SDK (Windows x86_64)'
+    name: 'Build ${{ matrix.target }} (Windows x86_64)'
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [sdk, tools]
 
     steps:
       - name: 'Checkout'
@@ -186,10 +201,11 @@ jobs:
             autoconf automake libtool pkg-config make git
             unzip
 
-      - name: 'Build and package SDK'
+      - name: 'Build and package'
         shell: msys2 {0}
         env:
           SDK_VERSION: ${{ steps.version.outputs.sdk_version }}
+          BUILD_TARGET: ${{ matrix.target }}
         run: |
           chmod +x tools/build.sh tools/package.sh
           ./tools/build.sh
@@ -198,10 +214,10 @@ jobs:
       - name: 'Upload artifact'
         uses: actions/upload-artifact@v7
         with:
-          name: sdk-windows-x86_64
+          name: ${{ matrix.target }}-windows-x86_64
           path: |
-            sdk/openmv-sdk-*.tar.xz
-            sdk/openmv-sdk-*.tar.xz.sha256
+            sdk/openmv-${{ matrix.target }}-*.tar.xz
+            sdk/openmv-${{ matrix.target }}-*.tar.xz.sha256
           retention-days: 7
           if-no-files-found: error
 
@@ -216,7 +232,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: artifacts/
-          pattern: 'sdk-*'
+          pattern: '*'
           merge-multiple: true
 
       - name: 'Upload to R2'
@@ -225,8 +241,11 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_ENDPOINT_URL: ${{ secrets.AWS_ENDPOINT_URL }}
         run: |
-          for f in artifacts/openmv-sdk-*.tar.xz artifacts/openmv-sdk-*.tar.xz.sha256; do
-            echo "Uploading $(basename "$f")..."
-            aws s3 cp "$f" "s3://download/sdk/$(basename "$f")"
+          for target in sdk tools; do
+            for f in artifacts/openmv-${target}-*.tar.xz artifacts/openmv-${target}-*.tar.xz.sha256; do
+              [ -e "$f" ] || continue
+              echo "Uploading $(basename "$f") -> ${target}/..."
+              aws s3 cp "$f" "s3://download/${target}/$(basename "$f")"
+            done
           done
           echo "Done."
