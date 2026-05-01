@@ -372,6 +372,13 @@ else
 fi
 rm "${SDK_STAGE}/python/pyvenv.cfg"
 
+# Install network kill-switch into bundled Python's site-packages.
+# Auto-imported by CPython at startup; refuses non-loopback socket
+# connects unless OPENMV_ALLOW_NET=1.
+echo "Installing network kill-switch..."
+SITE_PACKAGES="$("${PYTHON}" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+cp "${SCRIPT_DIR}/sitecustomize.py" "${SITE_PACKAGES}/sitecustomize.py"
+
 # Write version file
 echo ""
 echo "${SDK_VERSION}" > "${SDK_STAGE}/sdk.version"
