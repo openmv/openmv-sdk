@@ -348,8 +348,9 @@ if [[ "${BUILD_TARGET}" == "sdk" ]]; then
         gdbrunner==0.0.5 \
         "pyserial @ git+https://github.com/pyserial/pyserial.git@911a0b8c110f3d3513bab67e64d95d1310517454"
 else
-    # ethos-u-vela pins flatbuffers==24.3.25 and onnx2tf pins flatbuffers==25.12.19;
-    # both work fine on 25.x in practice, so override the resolver to break the tie.
+    # ethos-u-vela pins flatbuffers==24.3.25 and onnx2tf==2.4.0 pins
+    # flatbuffers==25.12.19; both work fine on 25.x in practice, so
+    # override the resolver to break the tie.
     echo "flatbuffers==25.12.19" > "${TMPDIR_SDK}/overrides.txt"
     VIRTUAL_ENV="${VENV}" "${UV}" pip install --python "${PYTHON}" --prefix "${VENV}" \
         --override "${TMPDIR_SDK}/overrides.txt" \
@@ -362,7 +363,12 @@ else
         torch==2.11.0 \
         torchvision==0.26.0 \
         ultralytics==8.4.45 \
-        onnx2tf==2.4.0
+        onnx2tf==1.28.8 \
+        onnxsim==0.6.3 \
+        onnx_graphsurgeon==0.6.1 \
+        ai_edge_litert==2.1.4 \
+        sng4onnx==2.0.1 \
+        sne4onnx==2.0.1
 fi
 rm "${SDK_STAGE}/python/pyvenv.cfg"
 
