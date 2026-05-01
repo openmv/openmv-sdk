@@ -28,7 +28,11 @@ case "$(uname -s)" in
     MSYS*|MINGW*) SDK_PLATFORM="windows-x86_64" ;;
     *)            SDK_PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)" ;;
 esac
-BUNDLE_NAME="openmv-${BUILD_TARGET}-${SDK_VERSION}-${SDK_PLATFORM}"
+if [[ "${BUILD_TARGET}" == "sdk" ]]; then
+    BUNDLE_NAME="openmv-sdk-${SDK_VERSION}-${SDK_PLATFORM}"
+else
+    BUNDLE_NAME="tools-${SDK_PLATFORM}"
+fi
 BUILD_DIR="${REPO_DIR}/sdk"
 SDK_STAGE="${BUILD_DIR}/${BUNDLE_NAME}"
 NPROC=$(nproc 2>/dev/null || sysctl -n hw.ncpu)
