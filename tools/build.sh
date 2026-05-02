@@ -364,11 +364,12 @@ else
         torchvision==0.26.0 \
         ultralytics==8.4.45 \
         onnx2tf==1.28.8 \
-        onnxsim==0.6.3 \
+        onnxslim==0.1.92 \
         onnx_graphsurgeon==0.6.1 \
         ai_edge_litert==2.1.4 \
         sng4onnx==2.0.1 \
-        sne4onnx==2.0.1
+        sne4onnx==2.0.1 \
+        tabulate==0.9.0
 fi
 rm "${SDK_STAGE}/python/pyvenv.cfg"
 
