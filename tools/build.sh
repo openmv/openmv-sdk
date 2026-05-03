@@ -369,6 +369,7 @@ else
         ai_edge_litert==2.1.4 \
         sng4onnx==2.0.1 \
         sne4onnx==2.0.1 \
+        onnxruntime==1.25.1 \
         tabulate==0.9.0
 fi
 rm "${SDK_STAGE}/python/pyvenv.cfg"
