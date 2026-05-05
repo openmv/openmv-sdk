@@ -365,6 +365,7 @@ else
         ultralytics==8.4.45 \
         onnx2tf==1.28.8 \
         onnxslim==0.1.92 \
+        onnxscript==0.7.0 \
         onnx_graphsurgeon==0.6.1 \
         ai_edge_litert==2.1.4 \
         sng4onnx==2.0.1 \
