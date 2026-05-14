@@ -115,9 +115,17 @@ extract_zip() {
     rm -rf "${tmpdir}"
     mkdir -p "${tmpdir}"
     unzip -q "${zipfile}" -d "${tmpdir}"
-    local topdir
-    topdir=$(find "${tmpdir}" -maxdepth 1 -mindepth 1 -type d | head -1)
-    cp -a "${topdir}/." "${destdir}/"
+    # Strip a single top-level wrapper directory if (and only if) the archive
+    # has exactly one entry at the root and that entry is a directory. The ARM
+    # mingw GCC ZIP has multiple top-level entries (bin/, lib/, arm-none-eabi/,
+    # ...) and must be copied as-is.
+    local entries
+    mapfile -t entries < <(find "${tmpdir}" -maxdepth 1 -mindepth 1)
+    if [ "${#entries[@]}" -eq 1 ] && [ -d "${entries[0]}" ]; then
+        cp -a "${entries[0]}/." "${destdir}/"
+    else
+        cp -a "${tmpdir}/." "${destdir}/"
+    fi
     rm -rf "${tmpdir}"
 }
 
