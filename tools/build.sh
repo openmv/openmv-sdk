@@ -156,9 +156,9 @@ mkdir -p "${SDK_STAGE}" "${BUILD_DIR}" "${TMPDIR_SDK}"
 # Download and verify all components
 echo ""
 if [[ "${BUILD_TARGET}" == "sdk" ]]; then
-    COMPONENTS="GCC LLVM CMAKE STEDGEAI PYTHON MAKE UNCRUSTIFY"
+    COMPONENTS="GCC LLVM CMAKE STEDGEAI PYTHON MAKE UNCRUSTIFY CUBEPROG"
     if [[ "${SDK_PLATFORM}" != windows-* ]]; then
-        COMPONENTS="${COMPONENTS} CUBEPROG PV"
+        COMPONENTS="${COMPONENTS} PV"
     fi
 else
     COMPONENTS="STEDGEAI PYTHON"
@@ -311,12 +311,10 @@ if [[ "${BUILD_TARGET}" == "sdk" ]]; then
     fi
     chmod +x "${SDK_STAGE}/bin/uncrustify"
 
-    # Extract: ST CubeProgrammer (not available on Windows)
-    if [[ "${SDK_PLATFORM}" != windows-* ]]; then
-        echo "Extracting ST CubeProgrammer..."
-        mkdir -p "${SDK_STAGE}/stcubeprog"
-        tar --strip-components=1 -zxf "${TMPDIR_SDK}/$(resolve_var CUBEPROG DEST)" -C "${SDK_STAGE}/stcubeprog"
-    fi
+    # Extract: ST CubeProgrammer
+    echo "Extracting ST CubeProgrammer..."
+    mkdir -p "${SDK_STAGE}/stcubeprog"
+    tar --strip-components=1 -zxf "${TMPDIR_SDK}/$(resolve_var CUBEPROG DEST)" -C "${SDK_STAGE}/stcubeprog"
 fi
 
 # Extract: Python + install packages
