@@ -161,22 +161,22 @@ if [[ "${BUILD_TARGET}" == "sdk" ]]; then
         COMPONENTS="${COMPONENTS} PV"
     fi
 else
-    COMPONENTS="STEDGEAI PYTHON"
+    COMPONENTS="GCC STEDGEAI PYTHON"
 fi
 for component in ${COMPONENTS}; do
     download_component "${component}"
 done
 
-if [[ "${BUILD_TARGET}" == "sdk" ]]; then
-    # Extract: GCC
-    echo "Extracting GCC..."
-    mkdir -p "${SDK_STAGE}/gcc"
-    if [[ "${SDK_PLATFORM}" == windows-* ]]; then
-        extract_zip "${TMPDIR_SDK}/$(resolve_var GCC DEST)" "${SDK_STAGE}/gcc"
-    else
-        tar --strip-components=1 -Jxf "${TMPDIR_SDK}/$(resolve_var GCC DEST)" -C "${SDK_STAGE}/gcc"
-    fi
+# Extract: GCC (needed by stedgeai for relocatable network compilation)
+echo "Extracting GCC..."
+mkdir -p "${SDK_STAGE}/gcc"
+if [[ "${SDK_PLATFORM}" == windows-* ]]; then
+    extract_zip "${TMPDIR_SDK}/$(resolve_var GCC DEST)" "${SDK_STAGE}/gcc"
+else
+    tar --strip-components=1 -Jxf "${TMPDIR_SDK}/$(resolve_var GCC DEST)" -C "${SDK_STAGE}/gcc"
+fi
 
+if [[ "${BUILD_TARGET}" == "sdk" ]]; then
     # Extract: LLVM
     echo "Extracting LLVM..."
     mkdir -p "${SDK_STAGE}/llvm"
