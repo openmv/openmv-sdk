@@ -294,22 +294,26 @@ if [[ "${BUILD_TARGET}" == "sdk" ]]; then
     # Build: Uncrustify from source
     echo "Building Uncrustify..."
     UNCRUSTIFY_BUILD="${TMPDIR_SDK}/uncrustify_build"
-    if [ ! -f "${UNCRUSTIFY_BUILD}/build/uncrustify" ]; then
+    # Without -G, cmake.exe falls back to "NMake Makefiles", which has no
+    # compiler in the MSYS2 shell. MSYS Makefiles is single-config.
+    UNCRUSTIFY_BIN="uncrustify"
+    CMAKE_GEN="Unix Makefiles"
+    if [[ "${SDK_PLATFORM}" == windows-* ]]; then
+        UNCRUSTIFY_BIN="uncrustify.exe"
+        CMAKE_GEN="MSYS Makefiles"
+    fi
+    if [ ! -f "${UNCRUSTIFY_BUILD}/build/${UNCRUSTIFY_BIN}" ]; then
         mkdir -p "${UNCRUSTIFY_BUILD}"
         tar --strip-components=1 -zxf "${TMPDIR_SDK}/$(resolve_var UNCRUSTIFY DEST)" -C "${UNCRUSTIFY_BUILD}"
         mkdir -p "${UNCRUSTIFY_BUILD}/build"
         (
             cd "${UNCRUSTIFY_BUILD}/build"
-            "${SDK_STAGE}/cmake/bin/cmake" .. -DCMAKE_BUILD_TYPE=Release
+            "${SDK_STAGE}/cmake/bin/cmake" .. -G "${CMAKE_GEN}" -DCMAKE_BUILD_TYPE=Release
             "${SDK_STAGE}/cmake/bin/cmake" --build . --parallel ${NPROC} --config Release
         )
     fi
-    if [[ "${SDK_PLATFORM}" == windows-* ]]; then
-        cp "${UNCRUSTIFY_BUILD}/build/Release/uncrustify.exe" "${SDK_STAGE}/bin/uncrustify.exe"
-    else
-        cp "${UNCRUSTIFY_BUILD}/build/uncrustify" "${SDK_STAGE}/bin/uncrustify"
-    fi
-    chmod +x "${SDK_STAGE}/bin/uncrustify"
+    cp "${UNCRUSTIFY_BUILD}/build/${UNCRUSTIFY_BIN}" "${SDK_STAGE}/bin/${UNCRUSTIFY_BIN}"
+    chmod +x "${SDK_STAGE}/bin/${UNCRUSTIFY_BIN}"
 
     # Extract: ST CubeProgrammer
     echo "Extracting ST CubeProgrammer..."
