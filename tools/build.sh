@@ -308,7 +308,10 @@ if [[ "${BUILD_TARGET}" == "sdk" ]]; then
         mkdir -p "${UNCRUSTIFY_BUILD}/build"
         (
             cd "${UNCRUSTIFY_BUILD}/build"
-            "${SDK_STAGE}/cmake/bin/cmake" .. -G "${CMAKE_GEN}" -DCMAKE_BUILD_TYPE=Release
+            # 0.75.0 uses uint32_t without including <cstdint>, which GCC 16
+            # no longer pulls in transitively.
+            "${SDK_STAGE}/cmake/bin/cmake" .. -G "${CMAKE_GEN}" \
+                -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-include cstdint"
             "${SDK_STAGE}/cmake/bin/cmake" --build . --parallel ${NPROC} --config Release
         )
     fi
